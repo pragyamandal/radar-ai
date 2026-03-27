@@ -1,0 +1,1 @@
+echo "# Radar AI Project" >> README.md
