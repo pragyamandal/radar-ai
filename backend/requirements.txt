@@ -1,0 +1,3 @@
+# Dependencies for the Radar AI backend
+fastapi
+uvicorn
