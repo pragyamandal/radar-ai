@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.pipelines.radar_pipeline import run_radar_pipeline
 from app.services.explanation_service import generate_explanation
+from app.agents.radar_agent import run_agent_pipeline
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -98,3 +99,22 @@ def explain_opportunity(request: ExplainRequest):
     except Exception as e:
         logger.error(f"Error generating explanation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Explanation generation failed: {str(e)}")
+
+
+@router.get("/agent")
+def get_radar_agent_analysis():
+    """
+    Get radar analysis using LangGraph agent pipeline.
+    
+    Returns:
+        Dictionary with opportunities, do_nothing flag, and message
+    """
+    try:
+        logger.info("Radar agent analysis request received")
+        result = run_agent_pipeline()
+        logger.info(f"Radar agent analysis completed: {len(result['opportunities'])} opportunities found")
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error in radar agent analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Radar agent analysis failed: {str(e)}")
