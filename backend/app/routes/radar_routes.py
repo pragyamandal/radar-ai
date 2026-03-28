@@ -2,10 +2,13 @@
 
 import logging
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from app.pipelines.radar_pipeline import run_radar_pipeline
 from app.services.explanation_service import generate_explanation
 from app.agents.radar_agent import run_agent_pipeline
+from app.services.voice_service import text_to_speech
+import os
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -29,6 +32,11 @@ class ExplainRequest(BaseModel):
     signal_story: str
     risk_level: str
     backtest: BacktestData
+
+
+class VoiceRequest(BaseModel):
+    text: str
+    ticker: str
 
 
 @router.get("/health")
@@ -118,3 +126,40 @@ def get_radar_agent_analysis():
     except Exception as e:
         logger.error(f"Error in radar agent analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Radar agent analysis failed: {str(e)}")
+
+
+@router.post("/voice")
+def generate_voice_explanation(request: VoiceRequest):
+    """
+    Generate audio from explanation text using Edge TTS.
+    
+    Args:
+        request: VoiceRequest with text and ticker
+    
+    Returns:
+        Audio file as MP3
+    """
+    try:
+        logger.info(f"Voice request received for {request.ticker}")
+        
+        # Generate audio
+        file_path = text_to_speech(request.text, request.ticker)
+        
+        if file_path is None:
+            logger.error(f"Failed to generate audio for {request.ticker}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate audio for {request.ticker}")
+        
+        logger.info(f"Audio generated successfully for {request.ticker}: {file_path}")
+        
+        # Return audio file
+        return FileResponse(
+            path=file_path,
+            media_type="audio/mpeg",
+            filename=f"{request.ticker}_explanation.mp3"
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating voice explanation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Voice generation failed: {str(e)}")
