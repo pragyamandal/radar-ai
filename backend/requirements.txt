@@ -1,0 +1,12 @@
+# Dependencies for the Radar AI backend
+fastapi
+uvicorn
+yfinance
+pandas
+numpy
+openai
+python-dotenv
+requests
+pydantic
+langchain
+langgraph

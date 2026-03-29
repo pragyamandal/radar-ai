@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)];
+  }
+  
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-2xl border border-white/10 shadow-2xl;
+  }
+  
+  .glow-blue {
+    @apply shadow-[0_0_40px_rgba(59,130,246,0.3)];
+  }
+}
+
+body {
+  background-color: #0A0A0F;
+  color: white;
+  overflow-x: hidden;
+}
+
+/* Subtle Starfield / Particle Background */
+.particle-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -2;
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08) 0%, transparent 50%);
+  overflow: hidden;
+}
+
+.particle-stars {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(2px 2px at 20px 30px, #ffffff20, rgba(0,0,0,0)),
+    radial-gradient(2px 2px at 40px 70px, #ffffff20, rgba(0,0,0,0)),
+    radial-gradient(2px 2px at 50px 160px, #ffffff15, rgba(0,0,0,0)),
+    radial-gradient(2px 2px at 90px 40px, #ffffff25, rgba(0,0,0,0)),
+    radial-gradient(2px 2px at 130px 80px, #ffffff20, rgba(0,0,0,0)),
+    radial-gradient(2px 2px at 160px 120px, #ffffff15, rgba(0,0,0,0));
+  background-repeat: repeat;
+  background-size: 200px 200px;
+  animation: float-stars 120s linear infinite;
+  opacity: 0.6;
+}
+
+@keyframes float-stars {
+  from { transform: translateY(0); }
+  to { transform: translateY(-200px); }
+}
+
+/* 3D Glass Blob Enhancer */
+.glass-blob {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+  filter: blur(80px);
+  border-radius: 50%;
+  z-index: -1;
+  animation: blob 15s infinite alternate ease-in-out;
+}
