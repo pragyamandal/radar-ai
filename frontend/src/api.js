@@ -1,6 +1,5 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const BASE_URL = "/api";
 
-// Auth APIs
 export const registerUser = async (email, password, risk_profile, investment_horizon) => {
   const res = await fetch(`${BASE_URL}/auth/register`, {
     method: "POST",
@@ -33,7 +32,6 @@ export const updateUserProfile = async (user_id, risk_profile, investment_horizo
   return res.json();
 };
 
-// Radar APIs
 export const getRadarOpportunities = async () => {
   const res = await fetch(`${BASE_URL}/radar/agent`);
   return res.json();
@@ -57,6 +55,16 @@ export const getExplanation = async (opportunity) => {
   return res.json();
 };
 
+export const getTechnicals = async (ticker) => {
+  const res = await fetch(`${BASE_URL}/radar/technicals/${ticker}`);
+  return res.json();
+};
+
+export const getStockHistory = async (ticker) => {
+  const res = await fetch(`${BASE_URL}/radar/history/${ticker}`);
+  return res.json();
+};
+
 export const getVoiceExplanation = async (text, ticker) => {
   const res = await fetch(`${BASE_URL}/radar/voice`, {
     method: "POST",
@@ -66,7 +74,6 @@ export const getVoiceExplanation = async (text, ticker) => {
   return res.blob();
 };
 
-// Coach APIs
 export const getBehaviourCoach = async (trade_history) => {
   const res = await fetch(`${BASE_URL}/coach`, {
     method: "POST",
@@ -76,7 +83,6 @@ export const getBehaviourCoach = async (trade_history) => {
   return res.json();
 };
 
-// Holdings APIs
 export const addHolding = async (user_id, ticker, quantity, buy_price) => {
   const res = await fetch(`${BASE_URL}/holdings/add`, {
     method: "POST",
@@ -97,5 +103,20 @@ export const recordTrade = async (trade) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(trade)
   });
+  return res.json();
+};
+
+export const getNiftySIP = async () => {
+  const res = await fetch(`${BASE_URL}/radar/nifty-sip`);
+  return res.json();
+};
+
+export const getMarketIndices = async () => {
+  const res = await fetch(`${BASE_URL}/radar/market-indices`);
+  return res.json();
+};
+
+export const getWatchlist = async () => {
+  const res = await fetch(`${BASE_URL}/radar/watchlist`);
   return res.json();
 };

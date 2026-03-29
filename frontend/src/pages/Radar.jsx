@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shield, Eye, ArrowUp, Zap, CheckCircle2, RefreshCw, BarChart2, Briefcase, AlertTriangle, ArrowRight, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import Sidebar from '../components/Sidebar';
+import { getRadarOpportunities, getTechnicals, getStockHistory } from '../api.js';
 
 // Recharts Dummy Signal Trajectory
 const chartData = [
@@ -73,20 +74,144 @@ const signals = [
   }
 ];
 
+const formatSignal = (signal) => {
+  const map = {
+    'volume_spike': 'Volume Spike',
+    'uptrend': 'Uptrend',
+    'breakout': 'Breakout',
+    'rsi_momentum': 'RSI Momentum'
+  };
+  return map[signal] || signal;
+};
+
 const Radar = () => {
-  const navigate = useNavigate();
+  const [signals, setSignals] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [isDoNothing, setIsDoNothing] = useState(false);
-  const [selectedSignal, setSelectedSignal] = useState('HDFCBANK.NS');
+  const [selectedSignal, setSelectedSignal] = useState(null);
+  const [activeStockPrice, setActiveStockPrice] = useState(null);
+  const [stockHistory, setStockHistory] = useState([]);
+  const navigate = useNavigate();
+
+  // Fetch data on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const data = await getRadarOpportunities();
+        if (data.do_nothing || data.opportunities.length === 0) {
+          setIsDoNothing(true);
+          setSignals([]);
+        } else {
+          setIsDoNothing(false);
+          const mapped = data.opportunities.map((opp) => ({
+            id: opp.ticker,
+            signalId: Math.abs(opp.ticker.split('').reduce((acc, char) =>
+              acc + char.charCodeAt(0), 0) * 137) % 90000 + 10000,
+            ticker: opp.ticker.replace('.NS', ''),
+            name: opp.ticker,
+            signals: opp.signals,
+            signal_story: opp.signal_story.replace('.NS', '').replace('_', ' ').replace('detected', '— Signal Detected'),
+            risk_level: opp.risk_level,
+            backtest: opp.backtest,
+            badge: opp.risk_level === 'Aggressive' ? 'HIGH CONVICTION' : opp.risk_level === 'Moderate' ? 'MODERATE' : 'CONSERVATIVE',
+            badgeColor: opp.risk_level === 'Aggressive' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : opp.risk_level === 'Moderate' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+            return: opp.backtest ? `${opp.backtest.median_return}%` : 'N/A',
+            returnColor: opp.backtest?.median_return > 0 ? 'text-emerald-400' : 'text-red-400',
+            sector: (() => {
+              const sectorMap = {
+                'RELIANCE.NS': 'Energy & Retail',
+                'TCS.NS': 'IT Services',
+                'INFY.NS': 'IT Services',
+                'HDFCBANK.NS': 'Banking',
+                'ICICIBANK.NS': 'Banking',
+                'HINDUNILVR.NS': 'FMCG',
+                'SBIN.NS': 'Banking',
+                'BHARTIARTL.NS': 'Telecom',
+                'ITC.NS': 'FMCG',
+                'KOTAKBANK.NS': 'Banking',
+                'LT.NS': 'Infrastructure',
+                'AXISBANK.NS': 'Banking',
+                'ASIANPAINT.NS': 'Paints',
+                'MARUTI.NS': 'Automobile',
+                'TITAN.NS': 'Consumer Goods',
+                'SUNPHARMA.NS': 'Pharma',
+                'WIPRO.NS': 'IT Services',
+                'ULTRACEMCO.NS': 'Cement',
+                'NESTLEIND.NS': 'FMCG',
+                'POWERGRID.NS': 'Power'
+              };
+              return sectorMap[opp.ticker] || 'NSE Large Cap';
+            })(),
+            changeColor: opp.backtest && opp.backtest.median_return > 0
+              ? 'text-emerald-400'
+              : 'text-red-400',
+            risk: `${opp.signal_count}/10`,
+            riskScore: opp.backtest
+              ? Math.min(10, Math.max(1, Math.round(
+                (opp.backtest.win_rate / 10) *
+                (opp.backtest.median_return > 0 ? 1.2 : 0.8)
+              )))
+              : opp.signal_count,
+            time: 'Just now',
+            type: opp.signals.map(s => formatSignal(s)).join(' + '),
+            price: '₹-',
+            change: '+0%',
+            entry: '₹-',
+            target: '₹-',
+            stopLoss: '₹-',
+            winRate: opp.backtest?.win_rate ? `${opp.backtest.win_rate}%` : 'N/A',
+            holdTime: opp.backtest?.total_trades ? `${opp.backtest.total_trades} trades` : 'N/A',
+            maxDrawdown: opp.backtest?.worst_return ? `${opp.backtest.worst_return}%` : 'N/A'
+          }));
+          setSignals(mapped);
+          if (mapped.length > 0) {
+            setSelectedSignal(mapped[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching opportunities:', error);
+        setIsDoNothing(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   // Hardcoded to display details based on selected asset (Since HDFC is the main visual focal point)
-  const activeStock = signals.find(s => s.id === selectedSignal) || signals[0];
+  const activeStock = signals.find(s => s.id === selectedSignal) || signals[0] || null;
+
+  useEffect(() => {
+    if (!activeStock) return;
+    setActiveStockPrice(null);
+    getTechnicals(activeStock.ticker.includes('.NS') ? activeStock.ticker : activeStock.ticker + '.NS')
+      .then(data => {
+        if (data && data.current_price) {
+          setActiveStockPrice({
+            price: data.current_price,
+            change_pct: data.position_pct
+          });
+        }
+      })
+      .catch(err => console.error('Price fetch failed:', err));
+
+    getStockHistory(activeStock.ticker.includes('.NS') ? activeStock.ticker : activeStock.ticker + '.NS')
+      .then(data => {
+        if (data && data.history) {
+          setStockHistory(data.history);
+        }
+      })
+      .catch(err => console.error('History fetch failed:', err));
+  }, [selectedSignal]);
 
   return (
     <div className="flex h-screen bg-[#0A0A0F] font-sans text-white overflow-hidden">
       <Sidebar />
 
       <main className="flex-1 ml-64 p-8 overflow-y-auto flex flex-col items-center">
-        
+
         {/* Header & Hidden Developer Mode Button */}
         <header className="mb-8 w-full max-w-7xl flex flex-col md:flex-row md:items-end justify-between gap-6 shrink-0">
           <div>
@@ -95,16 +220,16 @@ const Radar = () => {
               Real-time AI analysis of cross-market volatility clusters.
             </p>
           </div>
-          
+
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => setIsDoNothing(!isDoNothing)}
               className="px-4 py-2 border border-white/20 text-gray-400 hover:text-white hover:border-white/50 bg-white/5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all"
             >
               Toggle Demo State ({isDoNothing ? 'Off' : 'On'})
             </button>
             <div className="hidden md:flex items-center gap-2 bg-white/5 border border-white/10 text-gray-300 px-4 py-2 rounded-lg text-sm font-bold">
-               Sort By: <span className="text-white">Confidence Score</span>
+              Sort By: <span className="text-white">Confidence Score</span>
             </div>
           </div>
         </header>
@@ -168,8 +293,8 @@ const Radar = () => {
             {/* Bottom Insight Footer */}
             <div className="flex flex-col items-center gap-6">
               <div className="flex items-center gap-3">
-                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                 <span className="text-xs font-bold tracking-widest uppercase text-gray-400">ACTIVE MONITORING</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="text-xs font-bold tracking-widest uppercase text-gray-400">ACTIVE MONITORING</span>
               </div>
               <h2 className="text-2xl font-bold tracking-tight">Why patience is your edge.</h2>
               <p className="text-sm text-gray-400 text-center max-w-xl leading-relaxed">
@@ -190,24 +315,23 @@ const Radar = () => {
              ACTIVE MASTER-DETAIL STATE (lol2.jpg)
              ========================================= */
           <div className="w-full max-w-7xl flex-1 flex flex-col md:flex-row gap-6 pb-20">
-            
+
             {/* LEFT PANEL: The Scrubber List */}
             <div className="w-full md:w-[380px] flex flex-col gap-4 shrink-0">
               {signals.map((sig) => {
                 const isActive = selectedSignal === sig.id;
                 return (
-                  <div 
+                  <div
                     key={sig.id}
                     onClick={() => setSelectedSignal(sig.id)}
-                    className={`bg-[#111118] border rounded-2xl p-6 cursor-pointer transition-all relative overflow-hidden group ${
-                      isActive ? 'border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 'border-white/5 hover:border-white/20'
-                    }`}
+                    className={`bg-[#111118] border rounded-2xl p-6 cursor-pointer transition-all relative overflow-hidden group ${isActive ? 'border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 'border-white/5 hover:border-white/20'
+                      }`}
                   >
                     {isActive && (
                       <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 rounded-l-2xl"></div>
                     )}
                     <div className="flex justify-between items-start mb-6">
-                      <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase relative z-10">SIGNAL #{sig.id.length * 1024}</span>
+                      <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase relative z-10">SIGNAL #{sig.signalId}</span>
                       <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border relative z-10 ${sig.badgeColor}`}>
                         {sig.badge}
                       </div>
@@ -220,12 +344,12 @@ const Radar = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-1">RISK SCORE</p>
-                        <p className="text-xl font-bold text-white">{sig.risk}</p>
+                        <p className="text-xl font-bold text-white">{sig.riskScore}/10</p>
                       </div>
                     </div>
                     <div className="flex justify-between items-center text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                       <span>⏱ {sig.time}</span>
-                       <span>~ {sig.type}</span>
+                      <span>⏱ {sig.time}</span>
+                      <span>~ {sig.type}</span>
                     </div>
                   </div>
                 )
@@ -233,178 +357,202 @@ const Radar = () => {
             </div>
 
             {/* RIGHT PANEL: Active Selected Detail */}
-            <div className="flex-1 flex flex-col gap-6">
-              
-              {/* Header Box */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end w-full gap-4">
-                 <div className="flex items-start gap-4">
-                   <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                     <div className="grid grid-cols-2 gap-1 w-5 h-5">
+            {activeStock && (
+              <div className="flex-1 flex flex-col gap-6">
+
+                {/* Header Box */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end w-full gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                      <div className="grid grid-cols-2 gap-1 w-5 h-5">
                         <div className="bg-emerald-400 rounded-[2px]" /><div className="bg-emerald-400 rounded-[2px]" />
                         <div className="bg-emerald-400 rounded-[2px]" /><div className="bg-emerald-400 rounded-[2px] opacity-40" />
-                     </div>
-                   </div>
-                   <div>
-                     <h2 className="text-4xl font-black tracking-tight uppercase leading-[0.9] text-white">
-                        {activeStock.name} <br/>({activeStock.ticker})
-                     </h2>
-                     <div className="flex items-center gap-3 mt-4 text-sm font-medium text-gray-400">
+                      </div>
+                    </div>
+                    <div>
+                      <h2 className="text-4xl font-black tracking-tight uppercase leading-[0.9] text-white">
+                        {activeStock?.ticker?.replace('.NS', '')}
+                      </h2>
+                      <div className="flex items-center gap-3 mt-4 text-sm font-medium text-gray-400">
                         <ArrowUp className="w-4 h-4 text-emerald-400" />
-                        <span className="text-emerald-400 font-bold">{activeStock.price} ({activeStock.change})</span>
-                        <span>NSE Large Cap</span>
-                     </div>
-                   </div>
-                 </div>
-                 
-                 <div className="flex gap-3 w-full md:w-auto mt-4 md:mt-0">
-                    <button 
-                      onClick={() => navigate(`/why/${activeStock.ticker}`)}
+                        <span className="text-emerald-400 font-bold">{activeStockPrice
+                          ? `₹${activeStockPrice.price.toLocaleString('en-IN')}`
+                          : 'Loading...'} ({activeStock.change})</span>
+                        <span>{activeStock?.sector}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 w-full md:w-auto mt-4 md:mt-0">
+                    <button
+                      onClick={() => {
+                        const ticker = activeStock.ticker;
+                        navigate(`/why/${ticker}`, {
+                          state: {
+                            signals: activeStock.signals,
+                            signal_story: activeStock.signal_story,
+                            risk_level: activeStock.risk_level,
+                            backtest: activeStock.backtest
+                          }
+                        });
+                      }}
                       className="flex-1 md:flex-none border border-white/20 hover:border-white/40 bg-white/5 hover:bg-white/10 text-white rounded-lg px-6 py-3 font-bold transition-all text-sm flex items-center justify-center gap-2"
                     >
                       <Zap className="w-4 h-4" /> AI Reasoning
                     </button>
-                    <button 
-                      onClick={() => navigate(`/stock/${activeStock.ticker}`)}
+                    <button
+                      onClick={() => {
+                        const ticker = activeStock.ticker;
+                        navigate(`/stock/${ticker}`, {
+                          state: {
+                            signals: activeStock.signals,
+                            signal_story: activeStock.signal_story,
+                            risk_level: activeStock.risk_level,
+                            backtest: activeStock.backtest
+                          }
+                        });
+                      }}
                       className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-500 text-white rounded-lg px-8 py-3 font-bold transition-all text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.3)]"
                     >
                       View Deep Dive <ArrowRight className="w-4 h-4" />
                     </button>
-                 </div>
-              </div>
+                  </div>
+                </div>
 
-              {/* Main Analysis Wrapper */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-[400px]">
-                
-                {/* Left Deep Chart Sector */}
-                <div className="md:col-span-2 bg-[#111118] border border-white/5 rounded-2xl p-6 flex flex-col">
-                  <div className="flex justify-between items-center mb-6">
-                     <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase">AI SIGNAL TRAJECTORY</p>
-                     <div className="flex gap-1">
+                {/* Main Analysis Wrapper */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-[400px]">
+
+                  {/* Left Deep Chart Sector */}
+                  <div className="md:col-span-2 bg-[#111118] border border-white/5 rounded-2xl p-6 flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                      <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase">AI SIGNAL TRAJECTORY</p>
+                      <div className="flex gap-1">
                         <span className="px-2 py-1 text-[9px] font-bold bg-white/10 text-white rounded cursor-pointer">1H</span>
                         <span className="px-2 py-1 text-[9px] font-bold bg-blue-500 text-white rounded cursor-pointer">1D</span>
                         <span className="px-2 py-1 text-[9px] font-bold bg-white/5 text-gray-400 rounded cursor-pointer hover:bg-white/10">1W</span>
-                     </div>
+                      </div>
+                    </div>
+
+                    {/* Recharts Glowing Area Chart Mockup */}
+                    <div className="flex-1 w-full min-h-[250px] relative mt-2 -mx-4 bg-[#0a0f18] rounded-xl border border-blue-500/10 overflow-hidden">
+                      {/* Background Grid Pattern inside chart */}
+                      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:30px_30px]" />
+                      <ResponsiveContainer width="100%" height="100%" className={"relative z-10"}>
+                        <AreaChart data={stockHistory.length > 0 ? stockHistory : []} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                            </linearGradient>
+                            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                              <feGaussianBlur stdDeviation="3" result="blur" />
+                              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                          </defs>
+                          <YAxis hide domain={['dataMin - 100', 'dataMax + 100']} />
+                          <Area
+                            type="monotone"
+                            dataKey="value"
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            fillOpacity={1}
+                            fill="url(#colorValue)"
+                            filter="url(#glow)"
+                            animationDuration={2000}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Target Bounds Bottom Strip */}
+                    <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/5 px-4">
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-1 text-center">ENTRY RANGE</p>
+                        <p className="text-sm font-bold text-white">{activeStockPrice ? `₹${(activeStockPrice.price * 0.99).toFixed(0)}` : '₹-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-1 text-center">TARGET 1</p>
+                        <p className="text-sm font-bold text-emerald-400">{activeStockPrice ? `₹${(activeStockPrice.price * 1.05).toFixed(0)}` : '₹-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-1 text-center">STOP LOSS</p>
+                        <p className="text-sm font-bold text-red-400">{activeStockPrice ? `₹${(activeStockPrice.price * 0.95).toFixed(0)}` : '₹-'}</p>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Recharts Glowing Area Chart Mockup */}
-                  <div className="flex-1 w-full min-h-[250px] relative mt-2 -mx-4 bg-[#0a0f18] rounded-xl border border-blue-500/10 overflow-hidden">
-                    {/* Background Grid Pattern inside chart */}
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:30px_30px]" />
-                    <ResponsiveContainer width="100%" height="100%" className={"relative z-10"}>
-                      <AreaChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                          </linearGradient>
-                          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feGaussianBlur stdDeviation="3" result="blur" />
-                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                          </filter>
-                        </defs>
-                        <YAxis hide domain={['dataMin - 100', 'dataMax + 100']} />
-                        <Area 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke="#10b981" 
-                          strokeWidth={2}
-                          fillOpacity={1} 
-                          fill="url(#colorValue)" 
-                          filter="url(#glow)"
-                          animationDuration={2000}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {/* Right Logic & History Column */}
+                  <div className="flex flex-col gap-6">
 
-                  {/* Target Bounds Bottom Strip */}
-                  <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/5 px-4">
-                     <div>
-                       <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-1 text-center">ENTRY RANGE</p>
-                       <p className="text-sm font-bold text-white">{activeStock.entry}</p>
-                     </div>
-                     <div>
-                       <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-1 text-center">TARGET 1</p>
-                       <p className="text-sm font-bold text-emerald-400">{activeStock.target}</p>
-                     </div>
-                     <div>
-                       <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-1 text-center">STOP LOSS</p>
-                       <p className="text-sm font-bold text-red-400">{activeStock.stopLoss}</p>
-                     </div>
+                    {/* Radar Reasoning List */}
+                    <div className="bg-[#111118] border border-white/5 rounded-2xl p-6 flex-1 flex flex-col justify-center relative overflow-hidden">
+                      <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></div>
+                      <p className="text-[10px] font-bold text-white tracking-widest uppercase mb-6">RADAR REASONING</p>
+
+                      <div className="space-y-4">
+                        {activeStock && [
+                          `${formatSignal(activeStock.signals[0])} detected in ${activeStock.ticker.replace('.NS', '')} — unusual activity vs 20-day average`,
+                          `Backtest shows ${activeStock.backtest?.win_rate}% win rate across ${activeStock.backtest?.total_trades} historical trades`,
+                          `Risk level: ${activeStock.risk_level} — median return ${activeStock.backtest?.median_return}% over 30-day holding period`
+                        ].map((point, i) => (
+                          <div key={i} className="flex items-start gap-3 mb-3">
+                            <div className="w-5 h-5 rounded-full border border-emerald-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                            </div>
+                            <p className="text-sm text-gray-300 leading-relaxed">{point}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Historical Performance Block */}
+                    <div className="bg-[#111118] border border-white/5 rounded-2xl p-6">
+                      <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-6 line-clamp-2">HISTORICAL PERFORMANCE</p>
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-xs text-gray-400 w-24">Win Rate <span className="text-[9px]">(similar setup)</span></span>
+                        <span className="text-base font-black tracking-tight">{activeStock.winRate}</span>
+                      </div>
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-xs text-gray-400">Avg. Hold Time</span>
+                        <span className="text-base font-black tracking-tight">{activeStock.holdTime}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">Max Drawdown</span>
+                        <span className="text-base font-black tracking-tight text-red-400">{activeStock.maxDrawdown}</span>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
 
-                {/* Right Logic & History Column */}
-                <div className="flex flex-col gap-6">
-                  
-                  {/* Radar Reasoning List */}
-                  <div className="bg-[#111118] border border-white/5 rounded-2xl p-6 flex-1 flex flex-col justify-center relative overflow-hidden">
-                     <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></div>
-                     <p className="text-[10px] font-bold text-white tracking-widest uppercase mb-6">RADAR REASONING</p>
-                     
-                     <div className="space-y-4">
-                        <div className="flex items-start gap-4">
-                           <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                           <p className="text-sm text-gray-400 font-medium leading-relaxed tracking-wide">Cluster of institutional buy orders detected in dark pools at ₹1,835 support level.</p>
-                        </div>
-                        <div className="flex items-start gap-4">
-                           <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                           <p className="text-sm text-gray-400 font-medium leading-relaxed tracking-wide">Credit demand sentiment index reached 5-year high in institutional reports.</p>
-                        </div>
-                        <div className="flex items-start gap-4">
-                           <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                           <p className="text-sm text-gray-400 font-medium leading-relaxed tracking-wide">RSI divergence on the 4H frame indicates total exhaustion of recent pullback.</p>
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* Historical Performance Block */}
-                  <div className="bg-[#111118] border border-white/5 rounded-2xl p-6">
-                    <p className="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-6 line-clamp-2">HISTORICAL PERFORMANCE</p>
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-xs text-gray-400 w-24">Win Rate <span className="text-[9px]">(similar setup)</span></span>
-                      <span className="text-base font-black tracking-tight">{activeStock.winRate}</span>
-                    </div>
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-xs text-gray-400">Avg. Hold Time</span>
-                      <span className="text-base font-black tracking-tight">{activeStock.holdTime}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-400">Max Drawdown</span>
-                      <span className="text-base font-black tracking-tight text-red-400">{activeStock.maxDrawdown}</span>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* Bottom Strip Cross Asset Correlation */}
-              <div className="w-full bg-[#111118] border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between mt-2 gap-4">
-                 <div className="flex items-center gap-3 w-full md:w-auto">
+                {/* Bottom Strip Cross Asset Correlation */}
+                <div className="w-full bg-[#111118] border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between mt-2 gap-4">
+                  <div className="flex items-center gap-3 w-full md:w-auto">
                     <p className="text-[10px] font-bold text-gray-100 tracking-widest uppercase whitespace-nowrap">CROSS-ASSET CORRELATION MATRIX</p>
                     <p className="text-[10px] text-gray-500 font-medium hidden md:block border-l border-white/10 pl-3">High correlation increases systemic risk exposure</p>
-                 </div>
-                 <div className="flex overflow-x-auto gap-4 md:w-auto w-full pb-2 md:pb-0 hide-scrollbar">
+                  </div>
+                  <div className="flex overflow-x-auto gap-4 md:w-auto w-full pb-2 md:pb-0 hide-scrollbar">
                     {/* Indian Market Metrics */}
                     <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg shrink-0 border border-white/5">
-                       <span className="text-[10px] font-black text-white bg-white/10 px-1 rounded">NIFTY</span>
-                       <span className="text-[11px] font-bold text-gray-400">Nifty 50</span>
-                       <span className="text-xs font-black text-emerald-400 ml-1">0.84</span>
+                      <span className="text-[10px] font-black text-white bg-white/10 px-1 rounded">NIFTY</span>
+                      <span className="text-[11px] font-bold text-gray-400">Nifty 50</span>
+                      <span className="text-xs font-black text-emerald-400 ml-1">0.84</span>
                     </div>
                     <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg shrink-0 border border-white/5">
-                       <span className="text-[10px] font-black text-white bg-white/10 px-1 rounded">BANK</span>
-                       <span className="text-[11px] font-bold text-gray-400">BankNifty</span>
-                       <span className="text-xs font-black text-emerald-400 ml-1">0.96</span>
+                      <span className="text-[10px] font-black text-white bg-white/10 px-1 rounded">BANK</span>
+                      <span className="text-[11px] font-bold text-gray-400">BankNifty</span>
+                      <span className="text-xs font-black text-emerald-400 ml-1">0.96</span>
                     </div>
                     <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg shrink-0 border border-white/5">
-                       <span className="text-[10px] font-black text-white bg-white/10 px-1 rounded">USD</span>
-                       <span className="text-[11px] font-bold text-gray-400">USDINR</span>
-                       <span className="text-xs font-black text-red-400 ml-1">-0.32</span>
+                      <span className="text-[10px] font-black text-white bg-white/10 px-1 rounded">USD</span>
+                      <span className="text-[11px] font-bold text-gray-400">USDINR</span>
+                      <span className="text-xs font-black text-red-400 ml-1">-0.32</span>
                     </div>
-                 </div>
-              </div>
+                  </div>
+                </div>
 
-            </div>
+              </div>
+            )}
           </div>
         )}
 

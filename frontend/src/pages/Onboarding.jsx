@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Radar, ArrowRight, Shield, Scale, Rocket, Check } from 'lucide-react';
+import { updateUserProfile, addHolding } from '../api.js';
 
 const Onboarding = () => {
   const navigate = useNavigate();
@@ -14,13 +15,64 @@ const Onboarding = () => {
   const [monthlyInvestment, setMonthlyInvestment] = useState(25000);
   const [horizon, setHorizon] = useState('Medium (1-3 yrs)');
   const [holdings, setHoldings] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleFinish = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const user_id = localStorage.getItem('user_id');
+
+      // Map frontend risk profile to backend format
+      const riskMap = {
+        'Conservative': 'conservative',
+        'Balanced': 'moderate',
+        'Aggressive': 'aggressive'
+      };
+
+      // Map horizon to backend format
+      const horizonMap = {
+        'Short (<1 yr)': 'short',
+        'Medium (1-3 yrs)': 'medium',
+        'Long (3+ yrs)': 'long'
+      };
+
+      // Update user profile
+      await updateUserProfile(
+        user_id,
+        riskMap[riskProfile] || 'moderate',
+        horizonMap[horizon] || 'medium'
+      );
+
+      // Save holdings if provided
+      if (holdings.trim()) {
+        const tickers = holdings.split(',').map(h => h.trim().toUpperCase());
+        for (const ticker of tickers) {
+          if (ticker) {
+            await addHolding(user_id, ticker + '.NS', 1, 0);
+          }
+        }
+      }
+
+      // Save name and profile to localStorage
+      localStorage.setItem('radar_user_name', name || 'Investor');
+      localStorage.setItem('risk_profile', riskMap[riskProfile] || 'moderate');
+      localStorage.setItem('investment_horizon', horizonMap[horizon] || 'medium');
+
+      navigate('/dashboard');
+    } catch (err) {
+      setError('Failed to save profile. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const nextStep = () => {
     if (step < totalSteps) {
       setStep(step + 1);
     } else {
-      localStorage.setItem('radar_user_name', name || 'Investor');
-      navigate('/dashboard');
+      handleFinish();
     }
   };
 
@@ -36,7 +88,7 @@ const Onboarding = () => {
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] text-white flex flex-col font-sans selection:bg-blue-500/30 overflow-hidden relative">
-      
+
       {/* Background Orbs */}
       <div className="fixed top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="fixed bottom-[-10%] right-[-10%] w-[40rem] h-[40rem] bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
@@ -44,17 +96,17 @@ const Onboarding = () => {
       {/* Top Nav & Progress Indicator */}
       <nav className="w-full max-w-4xl mx-auto px-6 pt-10 pb-6 flex items-center justify-between z-10 relative">
         <div className="flex items-center space-x-2">
-           <div className="bg-blue-600 p-1.5 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+          <div className="bg-blue-600 p-1.5 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.5)]">
             <Radar className="w-5 h-5 text-white" />
           </div>
           <span className="text-xl font-bold tracking-tight">Radar</span>
         </div>
-        
+
         {/* Progress Dots */}
         <div className="flex items-center space-x-3">
           {[1, 2, 3].map((num) => (
             <div key={num} className="flex items-center">
-              <motion.div 
+              <motion.div
                 animate={{
                   backgroundColor: step >= num ? '#3B82F6' : '#2D3748',
                   scale: step === num ? 1.2 : 1
@@ -72,7 +124,7 @@ const Onboarding = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full px-6 z-10 relative pb-20 mt-8">
         <AnimatePresence mode="wait">
-          
+
           {/* STEP 1: IDENTITY */}
           {step === 1 && (
             <motion.div
@@ -85,19 +137,19 @@ const Onboarding = () => {
             >
               <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">What should we call you?</h1>
               <p className="text-gray-400 mb-10 text-lg">Let's personalize your intelligence feed.</p>
-              
+
               <div className="mb-10 group">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Vikram"
+
                   className="w-full bg-transparent border-b-2 border-white/20 focus:border-blue-500 text-3xl md:text-4xl font-bold py-4 text-white placeholder-gray-700 outline-none transition-colors"
                   autoFocus
                 />
               </div>
 
-              <motion.button 
+              <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={nextStep}
@@ -121,10 +173,10 @@ const Onboarding = () => {
             >
               <h1 className="text-4xl font-bold tracking-tight mb-4">What is your investing style?</h1>
               <p className="text-gray-400 mb-8 text-lg">We calibrate our signals based on your volatility tolerance.</p>
-              
+
               <div className="space-y-4 mb-10">
                 {/* Conservative */}
-                <div 
+                <div
                   onClick={() => setRiskProfile('Conservative')}
                   className={`cursor-pointer p-6 rounded-2xl border transition-all duration-300 flex items-center justify-between ${riskProfile === 'Conservative' ? 'bg-blue-600/10 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.15)]' : 'bg-white/5 border-white/10 hover:border-white/30'}`}
                 >
@@ -141,7 +193,7 @@ const Onboarding = () => {
                 </div>
 
                 {/* Balanced */}
-                <div 
+                <div
                   onClick={() => setRiskProfile('Balanced')}
                   className={`cursor-pointer p-6 rounded-2xl border transition-all duration-300 flex items-center justify-between ${riskProfile === 'Balanced' ? 'bg-blue-600/10 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.15)]' : 'bg-white/5 border-white/10 hover:border-white/30'}`}
                 >
@@ -158,7 +210,7 @@ const Onboarding = () => {
                 </div>
 
                 {/* Aggressive */}
-                <div 
+                <div
                   onClick={() => setRiskProfile('Aggressive')}
                   className={`cursor-pointer p-6 rounded-2xl border transition-all duration-300 flex items-center justify-between ${riskProfile === 'Aggressive' ? 'bg-blue-600/10 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.15)]' : 'bg-white/5 border-white/10 hover:border-white/30'}`}
                 >
@@ -176,13 +228,13 @@ const Onboarding = () => {
               </div>
 
               <div className="flex gap-4">
-                <button 
+                <button
                   onClick={prevStep}
                   className="bg-white/5 hover:bg-white/10 text-white rounded-xl px-8 py-4 font-bold transition-all border border-white/10"
                 >
                   Back
                 </button>
-                <motion.button 
+                <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={nextStep}
@@ -206,7 +258,7 @@ const Onboarding = () => {
             >
               <h1 className="text-4xl font-bold tracking-tight mb-2">Configure your Radar</h1>
               <p className="text-gray-400 mb-8 text-lg">Set constraints for the engine.</p>
-              
+
               <div className="space-y-8 mb-10">
                 {/* Slider / Capital Input */}
                 <div className="bg-white/5 border border-white/10 p-6 rounded-2xl backdrop-blur-md">
@@ -214,10 +266,10 @@ const Onboarding = () => {
                     <label className="text-sm font-medium text-gray-300">Monthly deployment capacity</label>
                     <span className="text-2xl font-bold text-blue-400">₹{monthlyInvestment.toLocaleString('en-IN')}</span>
                   </div>
-                  <input 
-                    type="range" 
-                    min="5000" 
-                    max="500000" 
+                  <input
+                    type="range"
+                    min="5000"
+                    max="500000"
                     step="5000"
                     value={monthlyInvestment}
                     onChange={(e) => setMonthlyInvestment(parseInt(e.target.value))}
@@ -250,8 +302,8 @@ const Onboarding = () => {
                   <label className="block text-sm font-medium text-gray-300 mb-1">Existing Holdings (Optional)</label>
                   <p className="text-xs text-gray-500 mb-3 tracking-wide">We'll check for overlap before suggesting signals.</p>
                   <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus-within:border-blue-500 transition-colors">
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={holdings}
                       onChange={(e) => setHoldings(e.target.value)}
                       placeholder="e.g. RELIANCE, HDFCBANK, TCS..."
@@ -262,21 +314,24 @@ const Onboarding = () => {
               </div>
 
               <div className="flex gap-4">
-                <button 
+                <button
                   onClick={prevStep}
                   className="bg-white/5 hover:bg-white/10 text-white rounded-xl px-8 py-4 font-bold transition-all border border-white/10"
                 >
                   Back
                 </button>
-                <motion.button 
+                <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={nextStep}
+                  disabled={loading}
                   className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl px-10 py-4 font-bold transition-all flex justify-center items-center gap-3 shadow-[0_0_30px_rgba(59,130,246,0.5)] border border-blue-400/30"
                 >
-                  <Rocket className="w-5 h-5 fill-white/20" /> Launch My Radar
+                  <Rocket className="w-5 h-5 fill-white/20" /> {loading ? 'Setting up...' : 'Launch My Radar'}
                 </motion.button>
               </div>
+
+              {error && <p className="text-red-400 text-sm text-center mt-4">{error}</p>}
             </motion.div>
           )}
 

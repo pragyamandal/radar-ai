@@ -1,69 +1,37 @@
-# Service for handling data-related operations
-
-import logging
-import yfinance as yf
 import pandas as pd
-from app.constants import NIFTY_STOCKS, LOOKBACK_PERIOD
+import logging
+from app.constants import LOOKBACK_PERIOD
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
-# In-memory cache for stock data
-_data_cache = {}
-
-
-def get_stock_data(ticker: str) -> pd.DataFrame | None:
-    """
-    Fetch historical stock data for a given ticker.
-    
-    Args:
-        ticker: Stock ticker symbol (e.g., "RELIANCE.NS")
-    
-    Returns:
-        pandas DataFrame with OHLCV data or None if fetch fails
-    """
-    # Check cache first
-    if ticker in _data_cache:
-        logger.debug(f"Returning cached data for {ticker}")
-        return _data_cache[ticker]
-    
+def get_stock_data(ticker: str):
     try:
-        logger.info(f"Fetching data for {ticker}")
-        data = yf.download(ticker, period=LOOKBACK_PERIOD, progress=False)
+        import yfinance as yf
+        df = yf.download(ticker, period=LOOKBACK_PERIOD, progress=False, auto_adjust=True)
         
-        # Select relevant columns
-        data = data[["Open", "High", "Low", "Close", "Volume"]]
+        if df is None or df.empty:
+            logger.warning(f"No data for {ticker}")
+            return None
         
-        # Drop missing values
-        data = data.dropna()
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
         
-        # Cache the result
-        _data_cache[ticker] = data
+        last_close = float(df['Close'].iloc[-1])
+        logger.info(f"✅ {ticker} = {last_close:.2f}")
         
-        logger.info(f"Successfully fetched data for {ticker}")
-        return data
-    
+        return df.dropna()
+        
     except Exception as e:
-        logger.error(f"Error fetching data for {ticker}: {str(e)}")
+        logger.error(f"Error fetching {ticker}: {e}")
         return None
 
-
-def get_multiple_stocks(tickers: list) -> dict:
-    """
-    Fetch historical data for multiple stocks.
-    
-    Args:
-        tickers: List of stock ticker symbols
-    
-    Returns:
-        Dictionary mapping ticker to DataFrame
-    """
-    stock_data = {}
-    
+def get_multiple_stocks(tickers: list):
+    result = {}
     for ticker in tickers:
-        data = get_stock_data(ticker)
-        if data is not None:
-            stock_data[ticker] = data
-    
-    logger.info(f"Retrieved data for {len(stock_data)}/{len(tickers)} stocks")
-    return stock_data
+        df = get_stock_data(ticker)
+        if df is not None:
+            result[ticker] = df
+    return result
+
+def clear_cache():
+    logger.info("Cache disabled - no-op")

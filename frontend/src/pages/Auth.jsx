@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Radar, ArrowRight, ShieldCheck } from 'lucide-react';
+import { loginUser, registerUser } from '../api.js';
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -9,6 +10,8 @@ const Auth = () => {
   const [phone, setPhone] = useState('');
   const [step, setStep] = useState('phone');
   const [otp, setOtp] = useState(['', '', '', '']);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handlePhoneSubmit = (e) => {
     e.preventDefault();
@@ -17,18 +20,38 @@ const Auth = () => {
     }
   };
 
-  const handleOtpVerify = (e) => {
+  const handleOtpVerify = async (e) => {
     e.preventDefault();
-    if (otp.every(digit => digit !== '')) {
-      // For mock purposes, just route directly. In reality, await auth token.
-      navigate('/onboarding');
+    if (!otp.every(d => d !== '')) return;
+    setLoading(true);
+    setError('');
+    try {
+      const email = phone + '@radar.com';
+      const password = otp.join('');
+      let result;
+      if (activeTab === 'login') {
+        result = await loginUser(email, password);
+      } else {
+        result = await registerUser(email, password, 'moderate', 'medium');
+      }
+      if (result.user_id) {
+        localStorage.setItem('user_id', result.user_id);
+        localStorage.setItem('risk_profile', result.risk_profile || 'moderate');
+        navigate('/onboarding');
+      } else {
+        setError(result.detail || 'Authentication failed');
+      }
+    } catch (err) {
+      setError('Connection failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleOtpChange = (index, value) => {
     if (value.length > 1) return; // Only allow 1 char
     if (!/^\d*$/.test(value)) return; // Only numbers
-    
+
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
@@ -49,19 +72,19 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen flex text-white bg-[#0A0A0F] font-sans">
-      
+
       {/* Left Panel - Hidden on Mobile */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-16">
         {/* Deep Gradient Background */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#060609] via-[#0A0A0F] to-[#0A1628] z-0" />
-        
+
         {/* Animated Orbs */}
-        <motion.div 
+        <motion.div
           animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
           transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
           className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px] z-10"
         />
-        <motion.div 
+        <motion.div
           animate={{ x: [0, -30, 0], y: [0, 30, 0] }}
           transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
           className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-600/10 rounded-full blur-[80px] z-10"
@@ -101,14 +124,14 @@ const Auth = () => {
 
       {/* Right Panel - Auth Flow */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative z-20">
-        
+
         {/* Grid pattern background for right side */}
-         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_20%,transparent_100%)] -z-10" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_20%,transparent_100%)] -z-10" />
 
         <div className="w-full max-w-md">
           {/* Mobile Logo Header */}
           <div className="lg:hidden flex justify-center mb-10 cursor-pointer" onClick={() => navigate('/')}>
-             <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
               <div className="bg-blue-600 p-1.5 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.5)]">
                 <Radar className="w-6 h-6 text-white" />
               </div>
@@ -116,7 +139,7 @@ const Auth = () => {
             </div>
           </div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5 }}
@@ -126,7 +149,7 @@ const Auth = () => {
 
             {step === 'phone' ? (
               <AnimatePresence mode="wait">
-                <motion.div 
+                <motion.div
                   key="phone-input"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -134,13 +157,13 @@ const Auth = () => {
                 >
                   {/* Tabs */}
                   <div className="flex bg-white/5 p-1 rounded-xl mb-8 border border-white/5">
-                    <button 
+                    <button
                       onClick={() => setActiveTab('login')}
                       className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'login' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
                     >
                       Login
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTab('signup')}
                       className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'signup' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
                     >
@@ -155,8 +178,8 @@ const Auth = () => {
                         <div className="pl-4 pr-3 py-3 border-r border-white/10 bg-white/5 text-gray-300 font-medium">
                           +91
                         </div>
-                        <input 
-                          type="tel" 
+                        <input
+                          type="tel"
                           maxLength="10"
                           value={phone}
                           onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
@@ -167,8 +190,8 @@ const Auth = () => {
                       </div>
                     </div>
 
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => setStep('otp')}
                       disabled={phone.length < 10}
                       className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white rounded-xl py-3.5 font-bold transition-all flex items-center justify-center gap-2 mb-6"
@@ -203,7 +226,7 @@ const Auth = () => {
                   exit={{ opacity: 0, x: -20 }}
                 >
                   <p className="text-gray-400 text-sm mb-8 text-center">
-                    Enter the 4-digit code sent to<br/>
+                    Enter the 4-digit code sent to<br />
                     <span className="text-white font-semibold tracking-wider">+91 {phone}</span>
                     <button type="button" onClick={() => setStep('phone')} className="ml-2 text-blue-400 hover:text-blue-300 text-xs underline">Edit</button>
                   </p>
@@ -224,16 +247,17 @@ const Auth = () => {
                       ))}
                     </div>
 
-                    <button 
-                      type="button" 
-                      onClick={() => navigate('/onboarding')}
-                      disabled={!otp.every(d => d !== '')}
+                    {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
+                    <button
+                      type="submit"
+                      disabled={!otp.every(d => d !== '') || loading}
                       className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl py-3.5 font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)]"
                     >
-                      Verify OTP
+                      {loading ? 'Verifying...' : 'Verify OTP'}
                     </button>
                   </form>
-                  
+
                   <p className="text-center text-xs text-gray-500 mt-6 mt-4 font-medium">
                     Didn't receive code? <span className="text-blue-400 cursor-pointer hover:text-blue-300 transition-colors">Resend in 00:59</span>
                   </p>

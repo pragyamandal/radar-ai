@@ -1,22 +1,8 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Bell, TrendingDown, Clock, ShieldCheck, Plus, Sparkles, ChevronRight } from 'lucide-react';
 import { LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import Sidebar from '../components/Sidebar';
-
-const chartData = [
-  { month: 'JAN', sip: 100000, perf: 100000 },
-  { month: 'FEB', sip: 102000, perf: 98000 },
-  { month: 'MAR', sip: 104500, perf: 101000 },
-  { month: 'APR', sip: 106000, perf: 99000 },
-  { month: 'MAY', sip: 108500, perf: 105000 },
-  { month: 'JUN', sip: 111000, perf: 103000 },
-  { month: 'JUL', sip: 114000, perf: 107000 },
-  { month: 'AUG', sip: 116500, perf: 104000 },
-  { month: 'SEP', sip: 119000, perf: 109000 },
-  { month: 'OCT', sip: 122000, perf: 102000 },
-  { month: 'NOV', sip: 125000, perf: 112000 },
-  { month: 'DEC', sip: 128500, perf: 108000 },
-];
+import { getBehaviourCoach, getNiftySIP } from '../api.js';
 
 const ScoreRing = ({ score }) => {
   const radius = 70;
@@ -56,18 +42,50 @@ const ScoreRing = ({ score }) => {
 };
 
 const Coach = () => {
+  const [coachData, setCoachData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [chartData, setChartData] = useState([]);
+  const [sipSummary, setSipSummary] = useState(null);
+
+  useEffect(() => {
+    const sampleTrades = [
+      { ticker: "RELIANCE.NS", action: "BUY", price_change_at_buy: 6.5, days_held: 4, return_pct: -3.2, portfolio_pct: 22 },
+      { ticker: "TCS.NS", action: "BUY", price_change_at_buy: 7.0, days_held: 3, return_pct: -1.5, portfolio_pct: 18 },
+      { ticker: "INFY.NS", action: "BUY", price_change_at_buy: 2.0, days_held: 30, return_pct: 4.5, portfolio_pct: 10 },
+      { ticker: "HDFCBANK.NS", action: "BUY", price_change_at_buy: 1.5, days_held: 45, return_pct: 3.0, portfolio_pct: 28 }
+    ];
+    getBehaviourCoach(sampleTrades)
+      .then(data => { setCoachData(data); setLoading(false); })
+      .catch(err => { console.error(err); setLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    getNiftySIP()
+      .then(data => {
+        if (data && data.data) {
+          setChartData(data.data);
+          const last = data.data[data.data.length - 1];
+          const first = data.data[0];
+          const opportunityCost = Math.round(last.perf - last.sip);
+          const alphaGain = Math.round(((last.sip - last.perf) / last.perf) * 100 * 10) / 10;
+          setSipSummary({ opportunityCost, alphaGain });
+        }
+      })
+      .catch(err => console.error('SIP fetch failed:', err));
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#0A0A0F] font-sans text-white flex">
       <Sidebar />
 
       <main className="ml-64 flex-1 p-8 pb-32 h-screen overflow-y-auto bg-[#0A0A0F]">
-        
+
         {/* Top Header */}
         <header className="flex justify-between items-start mb-10 w-full">
           <div className="flex-1 max-w-2xl relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Search patterns, history, or market signals..."
               className="w-full bg-[#111118] border border-white/5 rounded-lg py-3 pl-10 pr-4 text-sm text-gray-300 focus:outline-none focus:border-white/10 transition-colors placeholder-gray-600"
             />
@@ -76,43 +94,47 @@ const Coach = () => {
           <div className="flex items-center space-x-6 mt-1">
             <Bell className="w-5 h-5 text-gray-400 hover:text-white cursor-pointer transition-colors" />
             <div className="flex items-center space-x-3 text-right">
-               <div>
-                 <p className="text-sm font-bold text-white leading-tight">Behavior Coach</p>
-                 <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Verified Analyst</p>
-               </div>
-               <div className="w-10 h-10 rounded-full bg-gray-800 border border-white/20 overflow-hidden">
-                 <img src="https://i.pravatar.cc/150?u=a042581f4e39026704d" alt="User" className="w-full h-full object-cover" />
-               </div>
+              <div>
+                <p className="text-sm font-bold text-white leading-tight">Behavior Coach</p>
+                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Verified Analyst</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-gray-800 border border-white/20 overflow-hidden">
+                <img src="https://i.pravatar.cc/150?u=a042581f4e39026704d" alt="User" className="w-full h-full object-cover" />
+              </div>
             </div>
           </div>
         </header>
 
         {/* TOP SECTION */}
         <div className="grid grid-cols-12 gap-6 w-full">
-          
+
           {/* Left Column: The Score Ring */}
           <div className="col-span-12 xl:col-span-4 flex flex-col">
             <div className="bg-[#111118] border border-white/5 rounded-xl p-8 flex flex-col h-full relative overflow-hidden">
               {/* Background gradient hint */}
               <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-48 h-48 bg-blue-500/5 rounded-full blur-[60px] pointer-events-none"></div>
-              
+
               <div className="flex-1 flex flex-col items-center justify-center pt-8 z-10">
-                <ScoreRing score={62} />
-                
+                <ScoreRing score={coachData ? coachData.behaviour_score : 62} />
+
                 <h2 className="text-2xl font-bold tracking-tight text-white mt-12 mb-4 text-center">Moderate Emotional Bias</h2>
                 <p className="text-sm text-gray-400 text-center leading-relaxed">
-                  Your trading pattern shows a tendency for "Panic Exits" during micro-corrections. AI suggests reducing position sizing by 15% to improve decision stability.
+                  {coachData ? coachData.summary : 'Analyzing your trading behavior...'}
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mt-12 pt-6 border-t border-white/5 z-10 w-full">
                 <div className="text-center">
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">PATIENCE</p>
-                  <p className="text-emerald-400 font-bold text-lg">High</p>
+                  <p className={`${coachData?.behaviour_score >= 70 ? 'text-emerald-400' : coachData?.behaviour_score >= 40 ? 'text-amber-400' : 'text-red-400'} font-bold text-lg`}>
+                    {coachData?.behaviour_score >= 70 ? 'High' : coachData?.behaviour_score >= 40 ? 'Medium' : 'Low'}
+                  </p>
                 </div>
                 <div className="border-l border-white/5 text-center">
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">FOMO RISK</p>
-                  <p className="text-red-400 font-bold text-lg">Critical</p>
+                  <p className={`${coachData?.spike_chasing?.count >= 3 ? 'text-red-400' : coachData?.spike_chasing?.count >= 1 ? 'text-amber-400' : 'text-emerald-400'} font-bold text-lg`}>
+                    {coachData?.spike_chasing?.count >= 3 ? 'Critical' : coachData?.spike_chasing?.count >= 1 ? 'Moderate' : 'Low'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -135,14 +157,18 @@ const Coach = () => {
                   <div className="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
                     <TrendingDown className="w-5 h-5 text-red-400 group-hover:scale-110 transition-transform" />
                   </div>
-                  <span className="bg-red-500/10 text-red-500 text-[9px] font-black tracking-widest uppercase px-2 py-1 rounded">NEGATIVE IMPACT</span>
+                  <span className={`${coachData?.spike_chasing?.count > 0 ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-400'} text-[9px] font-black tracking-widest uppercase px-2 py-1 rounded`}>
+                    {coachData?.spike_chasing?.count > 0 ? 'NEGATIVE IMPACT' : 'DISCIPLINED'}
+                  </span>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-2">Panic Exit</h3>
+                <h3 className="text-lg font-bold text-white mb-2">{coachData?.spike_chasing?.count > 0 ? 'Spike Chasing' : 'Panic Exit'}</h3>
                 <p className="text-sm text-gray-400 leading-relaxed mb-6 flex-1">
-                  Selling during -2% intraday volatility on core holdings. Costing you an average of 4.2% yield per annum.
+                  {coachData?.spike_chasing?.count > 0
+                    ? `Bought ${coachData.spike_chasing.count} stocks during price spikes. ${coachData.spike_chasing.losses} trades lost money.`
+                    : 'No spike chasing detected in recent trades.'}
                 </p>
                 <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase tracking-widest border-t border-white/5 pt-4">
-                  <span>RECURRENCE: <span className="text-white">WEEKLY</span></span>
+                  <span>RECURRENCE: <span className="text-white">{coachData?.spike_chasing?.count > 0 ? `${coachData.spike_chasing.count} TIMES` : '0 TIMES'}</span></span>
                   <ChevronRight className="w-4 h-4" />
                 </div>
               </div>
@@ -153,14 +179,18 @@ const Coach = () => {
                   <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
                     <Clock className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
                   </div>
-                  <span className="bg-blue-500/10 text-blue-400 text-[9px] font-black tracking-widest uppercase px-2 py-1 rounded">OPPORTUNITY</span>
+                  <span className={`${coachData?.panic_selling?.count > 0 ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-400'} text-[9px] font-black tracking-widest uppercase px-2 py-1 rounded`}>
+                    {coachData?.panic_selling?.count > 0 ? 'NEGATIVE IMPACT' : 'DISCIPLINED'}
+                  </span>
                 </div>
                 <h3 className="text-lg font-bold text-white mb-2">Late Entry</h3>
                 <p className="text-sm text-gray-400 leading-relaxed mb-6 flex-1">
-                  Waiting for 3-day confirmation before entering trend signals. Resulting in entering at 85% of trend peak.
+                  {coachData?.panic_selling?.count > 0
+                    ? `Panic selling detected ${coachData.panic_selling.count} times. Sold too early during market dips.`
+                    : 'No panic selling detected in recent trades. Good holding discipline.'}
                 </p>
                 <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase tracking-widest border-t border-white/5 pt-4">
-                  <span>RECURRENCE: <span className="text-white">8 EVENTS</span></span>
+                  <span>RECURRENCE: <span className="text-white">{coachData?.panic_selling?.count > 0 ? `${coachData.panic_selling.count} EVENTS` : '0 EVENTS'}</span></span>
                   <ChevronRight className="w-4 h-4" />
                 </div>
               </div>
@@ -175,7 +205,9 @@ const Coach = () => {
                 </div>
                 <h3 className="text-lg font-bold text-white mb-2">Stop-Loss Integrity</h3>
                 <p className="text-sm text-gray-400 leading-relaxed mb-6 flex-1">
-                  Exceptional adherence to predefined exit levels on speculative positions. Preventing 12% drawdown last month.
+                  {coachData?.warnings?.length > 0
+                    ? coachData.warnings[0]
+                    : 'Good discipline maintained in recent trades.'}
                 </p>
                 <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase tracking-widest border-t border-white/5 pt-4">
                   <span>STRENGTH: <span className="text-emerald-400">HIGH</span></span>
@@ -201,70 +233,70 @@ const Coach = () => {
               <h2 className="text-2xl font-black tracking-tight text-white uppercase mb-2">THE BEHAVIORAL COST</h2>
               <p className="text-sm font-medium text-gray-400">Hypothetical Performance: Active Management vs. Nifty 50 Systematic SIP Strategy (Last 12 Months)</p>
             </div>
-            
+
             <div className="flex items-center space-x-6">
-               <div className="flex items-center space-x-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-                 <div className="w-2.5 h-2.5 rounded bg-[#4b5563]"></div>
-                 <span className="text-[10px] font-bold text-gray-300 tracking-widest uppercase">YOUR PERFORMANCE</span>
-               </div>
-               <div className="flex items-center space-x-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-                 <div className="w-2.5 h-2.5 rounded bg-[#3b82f6]"></div>
-                 <span className="text-[10px] font-bold text-white tracking-widest uppercase">SYSTEMATIC SIP</span>
-               </div>
+              <div className="flex items-center space-x-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+                <div className="w-2.5 h-2.5 rounded bg-[#4b5563]"></div>
+                <span className="text-[10px] font-bold text-gray-300 tracking-widest uppercase">YOUR PERFORMANCE</span>
+              </div>
+              <div className="flex items-center space-x-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+                <div className="w-2.5 h-2.5 rounded bg-[#3b82f6]"></div>
+                <span className="text-[10px] font-bold text-white tracking-widest uppercase">SYSTEMATIC SIP</span>
+              </div>
             </div>
           </div>
 
           <div className="w-full h-[320px] mb-8 relative">
-             <ResponsiveContainer width="100%" height="100%">
-               <LineChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                 <XAxis 
-                    dataKey="month" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{fill: '#6b7280', fontSize: 10, fontWeight: 'bold'}} 
-                    dy={15} 
-                  />
-                 <Tooltip 
-                    contentStyle={{backgroundColor: '#0A0A0F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px'}} 
-                    itemStyle={{color: '#fff', fontWeight: 'bold', padding: '4px 0'}}
-                    labelStyle={{color: '#9ca3af', marginBottom: '8px', fontSize: '12px', fontWeight: 'bold'}}
-                  />
-                 <Line 
-                    type="monotone" 
-                    dataKey="sip" 
-                    name="Systematic SIP" 
-                    stroke="#3b82f6" 
-                    strokeWidth={4} 
-                    dot={{ r: 0 }}
-                    activeDot={{ r: 6, fill: '#3b82f6', stroke: '#0A0A0F', strokeWidth: 4 }}
-                 />
-                 <Line 
-                    type="linear" 
-                    dataKey="perf" 
-                    name="Your Performance" 
-                    stroke="#4b5563" 
-                    strokeWidth={2} 
-                    strokeDasharray="4 4"
-                    dot={{ r: 0 }}
-                    activeDot={{ r: 4, fill: '#4b5563', stroke: '#0A0A0F', strokeWidth: 2 }}
-                 />
-               </LineChart>
-             </ResponsiveContainer>
-             
-             {/* Gradient overlay to fade bottom */}
-             <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-[#111118] to-transparent pointer-events-none"></div>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData.length > 0 ? chartData : []} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <XAxis
+                  dataKey="month"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#6b7280', fontSize: 10, fontWeight: 'bold' }}
+                  dy={15}
+                />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0A0A0F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px' }}
+                  itemStyle={{ color: '#fff', fontWeight: 'bold', padding: '4px 0' }}
+                  labelStyle={{ color: '#9ca3af', marginBottom: '8px', fontSize: '12px', fontWeight: 'bold' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="sip"
+                  name="Systematic SIP"
+                  stroke="#3b82f6"
+                  strokeWidth={4}
+                  dot={{ r: 0 }}
+                  activeDot={{ r: 6, fill: '#3b82f6', stroke: '#0A0A0F', strokeWidth: 4 }}
+                />
+                <Line
+                  type="linear"
+                  dataKey="perf"
+                  name="Your Performance"
+                  stroke="#4b5563"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={{ r: 0 }}
+                  activeDot={{ r: 4, fill: '#4b5563', stroke: '#0A0A0F', strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+
+            {/* Gradient overlay to fade bottom */}
+            <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-[#111118] to-transparent pointer-events-none"></div>
           </div>
 
           {/* Bottom Summary Strip */}
           <div className="bg-[#0A0A0F] border border-white/5 rounded-xl p-6 flex flex-col md:flex-row justify-between items-center">
             <div className="mb-4 md:mb-0">
               <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">TOTAL OPPORTUNITY COST</p>
-              <p className="text-3xl font-black text-red-400 tracking-tight">-₹1,18,500.00</p>
+              <p className="text-3xl font-black text-red-400 tracking-tight">{sipSummary ? `-₹${Math.abs(sipSummary.opportunityCost).toLocaleString('en-IN')}` : '-₹1,18,500.00'}</p>
             </div>
-            
+
             <div className="mb-4 md:mb-0 text-center md:px-16 md:border-l md:border-r border-white/5">
               <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">POTENTIAL ALPHA GAIN</p>
-              <p className="text-3xl font-black text-emerald-400 tracking-tight">+8.4%</p>
+              <p className="text-3xl font-black text-emerald-400 tracking-tight">{sipSummary ? `+${sipSummary.alphaGain}%` : '+8.4%'}</p>
             </div>
 
             <div>

@@ -101,18 +101,34 @@ Keep your explanation under 150 words. Use simple English .
             if content:
                 full_response += content
         
-        # Determine which response to use
-        explanation_text = full_response if full_response else reasoning_response
-        
-        # Check if response is empty
-        if not explanation_text:
-            logger.warning(f"Empty response received for {ticker}")
+        if full_response and len(full_response.strip()) > 50:
+            explanation = full_response.strip()
+        elif reasoning_response:
+            # Extract final structured answer from reasoning
+            import re
+            # Try to find where the actual answer starts
+            patterns = [
+                r'(?:Draft \d+:|Final answer:|Let me structure|Here is the|Here\'s the)\s*\n',
+                r'\*\*1\.',
+                r'(?<!\*\*)1\. (?:Why|Bharti|The stock|This stock)'
+            ]
+            explanation = reasoning_response
+            for pattern in patterns:
+                match = re.search(pattern, reasoning_response, re.IGNORECASE)
+                if match:
+                    candidate = reasoning_response[match.start():]
+                    if len(candidate) > 100:
+                        explanation = candidate
+                        break
+            # Clean up any remaining prompt-like text
+            explanation = explanation.strip()
+        else:
             return None
-        
-        logger.info(f"Explanation generated for {ticker}: {len(explanation_text)} characters")
-        
+
+        logger.info(f"Explanation generated for {ticker}: {len(explanation)} characters")
+
         return {
-            "explanation": explanation_text.strip(),
+            "explanation": explanation,
             "ticker": ticker
         }
     

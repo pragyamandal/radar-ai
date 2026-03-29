@@ -8,53 +8,49 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def run_backtest(df: pd.DataFrame, holding_days: int = 30) -> dict | None:
-    """
-    Run backtest simulation on historical stock data.
-    
-    Args:
-        df: DataFrame with OHLCV data and Close prices
-        holding_days: Number of days to hold each position (default 30)
-    
-    Returns:
-        Dictionary with backtest metrics or None if insufficient data
-    """
+def run_backtest(df: pd.DataFrame, holding_days: int = 30):
     try:
-        # Check if DataFrame has enough data
-        min_rows = holding_days + 10
-        if len(df) < min_rows:
-            logger.warning(f"Insufficient data for backtest. Need at least {min_rows} rows, got {len(df)}")
+        if df is None or df.empty:
+            return None
+        
+        # Deep copy to avoid modifying original
+        df = df.copy()
+        
+        # Flatten MultiIndex columns
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = [col[0] for col in df.columns]
+        
+        # Get Close as clean 1D series
+        if 'Close' not in df.columns:
+            return None
+            
+        close = df['Close']
+        if isinstance(close, pd.DataFrame):
+            close = close.iloc[:, 0]
+        close = pd.Series(close.values, dtype=float)
+        close = close.dropna().reset_index(drop=True)
+        
+        if len(close) < holding_days + 5:
             return None
         
         returns = []
+        for i in range(len(close) - holding_days):
+            buy = close.iloc[i]
+            sell = close.iloc[i + holding_days]
+            if buy > 0:
+                ret = ((sell - buy) / buy) * 100
+                returns.append(float(ret))
         
-        # Simulate trades for each day (except last holding_days days)
-        for i in range(len(df) - holding_days):
-            buy_price = df["Close"].iloc[i].item()
-            sell_price = df["Close"].iloc[i + holding_days].item()
+        if len(returns) < 5:
+            return None
             
-            # Calculate return percentage
-            return_pct = ((sell_price - buy_price) / buy_price) * 100
-            returns.append(return_pct)
-        
-        # Calculate metrics
-        returns_array = np.array(returns)
-        median_return = round(np.median(returns_array), 2)
-        best_return = round(np.max(returns_array), 2)
-        worst_return = round(np.min(returns_array), 2)
-        total_trades = len(returns)
-        win_rate = round((np.sum(returns_array > 0) / total_trades) * 100, 1)
-        
-        logger.info(f"Backtest completed: {total_trades} trades, {win_rate}% win rate")
-        
         return {
-            "median_return": median_return,
-            "best_return": best_return,
-            "worst_return": worst_return,
-            "total_trades": total_trades,
-            "win_rate": win_rate
+            "median_return": round(float(np.median(returns)), 2),
+            "best_return": round(float(np.max(returns)), 2),
+            "worst_return": round(float(np.min(returns)), 2),
+            "win_rate": round(sum(1 for r in returns if r > 0) / len(returns) * 100, 1),
+            "total_trades": len(returns)
         }
-    
     except Exception as e:
-        logger.error(f"Error running backtest: {str(e)}")
+        logging.error(f"Backtest error: {e}")
         return None
